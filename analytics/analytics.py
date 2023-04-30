@@ -8,59 +8,51 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy import Table, Column, Integer, String, MetaData, func
 
 print('Waiting for the data generator...')
-# sleep(20)
+sleep(20)
 print('ETL Starting...')
-
-POSTGRESQL_CS = 'postgresql+psycopg2://postgres:password@psql_db:5432/main'
-MYSQL_CS = 'mysql+pymysql://nonroot:nonroot@mysql_db/analytics?charset=utf8'
-
-# environ["POSTGRESQL_CS"]
-# environ["MYSQL_CS"]
+metadata_obj1 = MetaData()
+metadata_obj2 = MetaData()
+devices = Table(
+        'devices', metadata_obj1,
+        Column('device_id', String),
+        Column('temperature', Integer),
+        Column('location', String),
+        Column('time', String),
+    )
+metadata_obj = MetaData()
+device_aggregations = Table(
+    'device_aggregations', metadata_obj2,
+    Column('device_id', String(36)),
+    Column('max_temperature', Integer),
+    Column('distace_location', Integer),
+    Column('number_of_points', Integer),
+)
 
 while True:
     try:
-        psql_engine = create_engine(POSTGRESQL_CS, pool_pre_ping=True, pool_size=10)
-        mysql_engine = create_engine(MYSQL_CS, pool_pre_ping=True, pool_size=10)
-        metadata_obj = MetaData()
-        devices_mysql = Table(
-            'device_aggregations', metadata_obj,
-            Column('device_id', String),
-            Column('max_temperature', Integer),
-            Column('distace_location', Integer),
-            Column('number_of_points', Integer),
-        )
-        metadata_obj.create_all(psql_engine)
-        break
+        psql_engine = create_engine(environ["POSTGRESQL_CS"], pool_pre_ping=True, pool_size=10)
+        mysql_engine = create_engine(environ["MYSQL_CS"], pool_pre_ping=True, pool_size=10)        
+        metadata_obj2.create_all(mysql_engine)        
         break
     except OperationalError:
         sleep(0.1)
 
 print('Connection to PostgresSQL successful, and going to MySql.')
 
-metadata_obj = MetaData()
-devices = Table(
-        'devices', metadata_obj,
-        Column('device_id', String),
-        Column('temperature', Integer),
-        Column('location', String),
-        Column('time', String),
-    )
 
 def storeDataPointMysql(data_points):
     for data_point in data_points:
-        ins = devices_mysql.insert()  
-        with mysql_engine.connect() as conn:
-            while True:            
-                data = dict(
-                    device_id=data_point[0],
-                    max_temperature=data_point[1],
-                    distace_location=data_point[2],
-                    number_of_points=data_point[3]
-                )            
-                conn.execute(ins, data)
-                conn.commit()
-                print(device_id, data['time']) 
-
+        print("datapoint is ", data_point[0][0])
+        ins = device_aggregations.insert()  
+        with mysql_engine.connect() as conn:                    
+            data = dict(
+                device_id=data_point[0][0],
+                max_temperature=data_point[1],
+                distace_location=data_point[2],
+                number_of_points=data_point[3]
+            )            
+            conn.execute(ins, data)
+            conn.commit()                
 
 def Sort(sub_li):
     sub_li.sort(key = lambda x: x[0])
@@ -102,6 +94,7 @@ def getParams(sub_lists_by_id):
         total_distance = getDist(ls)
         print(ls[0], max_temperature, total_distance, number_of_items)
         results.append((ls[0], max_temperature, total_distance, number_of_items))
+    return results
 
 def get_data_point():
     
@@ -111,7 +104,7 @@ def get_data_point():
             one_hour = 60*60 # 3600 seconds
             
             hour_count = one_hour * 3 # since there are 3 records inserted every second, there will be 3600 * 3 times the records per hour
-            sleep(10) # sleep time would be one hour as we are looking for max_temperature, distance of the device and number of records per hour
+            sleep(one_hour) # sleep time would be one hour as we are looking for max_temperature, distance of the device and number of records per hour
 
             query = devices.select().order_by(devices.c.time.desc()).limit(hour_count) # querying the data for every hour in descending order by time so that we will get the latest records
             print("Query is ", query)     
